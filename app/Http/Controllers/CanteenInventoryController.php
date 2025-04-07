@@ -33,10 +33,10 @@ class CanteenInventoryController extends Controller {
     public function updateInventory(Request $request, $showId)
     {
         $data = $request->validate([
-            'inventories' => 'required|array', 
+            'inventories' => 'required|array', // expects [product_id => ['initial_stock'=>.., 'refill_stock'=>.., 'final_stock'=>..], ...]
         ]);
 
-        $action = $request->input('action'); 
+        $action = $request->input('action'); // "update_stock" or "update_inventory"
 
         DB::beginTransaction();
         try {
@@ -53,17 +53,14 @@ class CanteenInventoryController extends Controller {
                 $inventory->final_stock   = $inventoryData['final_stock'];
                 $inventory->save();
 
-                if ($action === 'update_stock') {
-                    // Simply update the product stock count to the final stock value.
-                    $product->stock_count = $inventory->final_stock;
-                    $product->save();
-                } elseif ($action === 'update_inventory') {
+                // Always update the product's current stock to match the final stock value
+                $product->stock_count = $inventory->final_stock;
+                $product->save();
+
+                if ($action === 'update_inventory') {
                     // Calculate sold units: (initial + refill) - final
                     $soldCount = ($inventory->initial_stock + $inventory->refill_stock) - $inventory->final_stock;
-                    // Update product stock: subtract soldCount from current stock (or set to final stock, as needed)
-                    $product->stock_count = max(0, $product->stock_count - $soldCount);
-                    $product->save();
-
+                    
                     // Calculate revenue from sold items
                     $revenue = $soldCount * $product->selling_price;
                     if ($soldCount > 0) {
@@ -73,7 +70,7 @@ class CanteenInventoryController extends Controller {
                             'balance'            => $this->calculateNewBalance($revenue),
                             'transaction_type'   => 'credit',
                             'username'           => auth()->user()->name,
-                            'inside_transaction' => false, // or adjust based on your needs
+                            'inside_transaction' => false, // Adjust as needed
                             'description'        => "Sold {$soldCount} units of {$product->name} during show {$showId}",
                         ]);
                     }
@@ -95,4 +92,5 @@ class CanteenInventoryController extends Controller {
         $previousBalance = $lastTransaction ? $lastTransaction->balance : 0;
         return $previousBalance + $creditAmount;
     }
+
 }
