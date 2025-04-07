@@ -33,10 +33,10 @@ class CanteenInventoryController extends Controller {
     public function updateInventory(Request $request, $showId)
     {
         $data = $request->validate([
-            'inventories' => 'required|array', 
+            'inventories' => 'required|array', // expects [product_id => ['initial_stock'=>.., 'refill_stock'=>.., 'final_stock'=>..], ...]
         ]);
 
-        $action = $request->input('action'); 
+        $action = $request->input('action'); // "update_stock" or "update_inventory"
 
         DB::beginTransaction();
         try {
@@ -53,17 +53,14 @@ class CanteenInventoryController extends Controller {
                 $inventory->final_stock   = $inventoryData['final_stock'];
                 $inventory->save();
 
-                if ($action === 'update_stock') {
-                    // Simply update the product stock count to the final stock value.
-                    $product->stock_count = $inventory->final_stock;
-                    $product->save();
-                } elseif ($action === 'update_inventory') {
+                // Always update the product's current stock to match the final stock value
+                $product->stock_count = $inventory->final_stock;
+                $product->save();
+
+                if ($action === 'update_inventory') {
                     // Calculate sold units: (initial + refill) - final
                     $soldCount = ($inventory->initial_stock + $inventory->refill_stock) - $inventory->final_stock;
-                    // Update product stock: subtract soldCount from current stock (or set to final stock, as needed)
-                    $product->stock_count = max(0, $product->stock_count - $soldCount);
-                    $product->save();
-
+                    
                     // Calculate revenue from sold items
                     $revenue = $soldCount * $product->selling_price;
                     if ($soldCount > 0) {
@@ -73,7 +70,7 @@ class CanteenInventoryController extends Controller {
                             'balance'            => $this->calculateNewBalance($revenue),
                             'transaction_type'   => 'credit',
                             'username'           => auth()->user()->name,
-                            'inside_transaction' => false, // or adjust based on your needs
+                            'inside_transaction' => false, // Adjust as needed
                             'description'        => "Sold {$soldCount} units of {$product->name} during show {$showId}",
                         ]);
                     }
@@ -95,4 +92,64 @@ class CanteenInventoryController extends Controller {
         $previousBalance = $lastTransaction ? $lastTransaction->balance : 0;
         return $previousBalance + $creditAmount;
     }
+
+
+    // Inside CanteenInventoryController.php
+    public function insideIndex()
+    {
+        // Fetch all products (you can add filters if needed)
+        $products = \App\Models\Product::all();
+        return view('canteen.inside_inventory.index', compact('products'));
+    }
+
+    public function insideStore(Request $request)
+    {
+        // Validate that 'items' is an array of product IDs with quantities
+        $data = $request->validate([
+            'items'       => 'required|array', // Example: items[product_id] = quantity_taken
+            'description' => 'nullable|string',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            foreach ($data['items'] as $productId => $quantity) {
+                if ($quantity > 0) {
+                    $product = \App\Models\Product::findOrFail($productId);
+                    // Deduct the taken quantity from the product's current stock
+                    $product->stock_count = max(0, $product->stock_count - $quantity);
+                    $product->save();
+
+                    // Calculate the debit amount using the product's original price
+                    $debitAmount = $quantity * $product->original_price;
+
+                    // Create a transaction record with inside_transaction set to true
+                    \App\Models\CanteenTransaction::create([
+                        'credit'             => 0,
+                        'debit'              => $debitAmount,
+                        'balance'            => $this->calculateNewBalanceDebit($debitAmount),
+                        'transaction_type'   => 'debit',
+                        'username'           => auth()->user()->name,
+                        'inside_transaction' => true,
+                        'description'        => $data['description'] ?? "Inside consumption: Removed {$quantity} units of {$product->name}",
+                    ]);
+                }
+            }
+            DB::commit();
+            return redirect()->route('canteen.inside_inventory.index')->with('success', 'Inside inventory updated successfully.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Inside Inventory Update Error: ' . $e->getMessage());
+            return redirect()->back()->withErrors('Failed to update inside inventory: ' . $e->getMessage());
+        }
+    }
+
+    // Helper method to calculate the new balance when deducting money:
+    private function calculateNewBalanceDebit($debitAmount)
+    {
+        $lastTransaction = \App\Models\CanteenTransaction::orderBy('created_at', 'desc')->first();
+        $previousBalance = $lastTransaction ? $lastTransaction->balance : 0;
+        return $previousBalance - $debitAmount;
+    }
+
+
 }
