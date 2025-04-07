@@ -23,11 +23,11 @@ class ProductController extends Controller {
             'selling_price'  => 'required|numeric|min:0',
             'category'       => 'required|string',
             'description'    => 'nullable|string',
-            // Validate soda fields only if category is soda:
-            'soda_name'      => 'required_if:category,soda|string',
-            'brand'          => 'required_if:category,soda|string',
-            'size_ml'        => 'required_if:category,soda|integer',
-        ]);
+            // Soda fields are required only if category is exactly "soda"
+            'soda_name'      => 'required_if:category,soda|nullable|string',
+            'brand'          => 'required_if:category,soda|nullable|string',
+            'size_ml'        => 'required_if:category,soda|nullable|integer',
+        ]);        
     
         $product = Product::create($data);
     

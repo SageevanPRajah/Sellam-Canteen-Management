@@ -8,7 +8,7 @@
         </div>
         <div>
             <label>Stock Count:</label>
-            <input type="number" name="stock_count" value="0" required>
+            <input type="number" name="stock_count" required>
         </div>
         <div>
             <label>Original Price:</label>
@@ -51,12 +51,18 @@
     </form>
 
     <script>
-      // Toggle soda details based on category selection
-      const categorySelect = document.getElementById('category');
-      const sodaDetails = document.getElementById('soda-details');
-      
-      categorySelect.addEventListener('change', function() {
-          sodaDetails.style.display = (this.value === 'soda') ? 'block' : 'none';
-      });
+        const categorySelect = document.getElementById('category');
+        const sodaDetails = document.getElementById('soda-details');
+        const sodaInputs = sodaDetails.querySelectorAll('input');
+    
+        categorySelect.addEventListener('change', function() {
+            if(this.value === 'soda'){
+                sodaDetails.style.display = 'block';
+            } else {
+                sodaDetails.style.display = 'none';
+                // Clear soda field values so they don't submit empty strings
+                sodaInputs.forEach(input => input.value = '');
+            }
+        });
     </script>
 </x-app-layout>
