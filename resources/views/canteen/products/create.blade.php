@@ -20,7 +20,28 @@
         </div>
         <div>
             <label>Category:</label>
-            <input type="text" name="category">
+            <select name="category" id="category" required>
+                <option value="">Select Category</option>
+                <option value="soda">Soda</option>
+                <option value="popcorn">Popcorn</option>
+                <option value="chips">Chips</option>
+                <option value="water">Water Bottle</option>
+            </select>
+        </div>
+        <!-- Soda Details: show only if category is soda -->
+        <div id="soda-details" style="display:none;">
+            <div>
+                <label>Soda Name:</label>
+                <input type="text" name="soda_name">
+            </div>
+            <div>
+                <label>Brand:</label>
+                <input type="text" name="brand">
+            </div>
+            <div>
+                <label>Size (ml):</label>
+                <input type="number" name="size_ml">
+            </div>
         </div>
         <div>
             <label>Description:</label>
@@ -28,4 +49,14 @@
         </div>
         <button type="submit">Create Product</button>
     </form>
+
+    <script>
+      // Toggle soda details based on category selection
+      const categorySelect = document.getElementById('category');
+      const sodaDetails = document.getElementById('soda-details');
+      
+      categorySelect.addEventListener('change', function() {
+          sodaDetails.style.display = (this.value === 'soda') ? 'block' : 'none';
+      });
+    </script>
 </x-app-layout>
