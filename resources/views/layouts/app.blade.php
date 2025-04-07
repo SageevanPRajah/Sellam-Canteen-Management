@@ -61,6 +61,12 @@
                             <span x-show="isOpen" x-transition>Transactions</span>
                         </a>
                     </li>
+                    <li class="mt-5 mx-5">
+                        <a href="{{ route('canteen.inside_inventory.index') }}" class="flex items-center text-white hover:text-gray-300 px-4 py-2">
+                            <i class="fas fa-money-check-alt mr-2"></i>
+                            <span x-show="isOpen" x-transition>Inside Consumption</span>
+                        </a>
+                    </li>
                     @if(Auth::user()->usertype === 'super_admin')
                     <li class="mt-5 mx-5">
                         <a href="{{ route('superadmin.dashboard') }}" class="flex items-center text-white hover:text-gray-300 px-4 py-2">

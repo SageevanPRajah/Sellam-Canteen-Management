@@ -81,6 +81,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/inventory/{showId}', [CanteenInventoryController::class, 'showInventory'])->name('inventory.show');
         Route::post('/inventory/{showId}', [CanteenInventoryController::class, 'updateInventory'])->name('inventory.update');
 
+        // Inside Inventory routes
+        Route::get('/inside-inventory', [CanteenInventoryController::class, 'insideIndex'])->name('inside_inventory.index');
+        Route::post('/inside-inventory', [CanteenInventoryController::class, 'insideStore'])->name('inside_inventory.store');
+
         // Shows: only date and time needed
         Route::get('/shows', [ShowController::class, 'index'])->name('shows.index');
         Route::get('/shows/create', [ShowController::class, 'create'])->name('shows.create');

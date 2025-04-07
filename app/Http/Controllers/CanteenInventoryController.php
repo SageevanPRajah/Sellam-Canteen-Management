@@ -93,4 +93,63 @@ class CanteenInventoryController extends Controller {
         return $previousBalance + $creditAmount;
     }
 
+
+    // Inside CanteenInventoryController.php
+    public function insideIndex()
+    {
+        // Fetch all products (you can add filters if needed)
+        $products = \App\Models\Product::all();
+        return view('canteen.inside_inventory.index', compact('products'));
+    }
+
+    public function insideStore(Request $request)
+    {
+        // Validate that 'items' is an array of product IDs with quantities
+        $data = $request->validate([
+            'items'       => 'required|array', // Example: items[product_id] = quantity_taken
+            'description' => 'nullable|string',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            foreach ($data['items'] as $productId => $quantity) {
+                if ($quantity > 0) {
+                    $product = \App\Models\Product::findOrFail($productId);
+                    // Deduct the taken quantity from the product's current stock
+                    $product->stock_count = max(0, $product->stock_count - $quantity);
+                    $product->save();
+
+                    // Calculate the debit amount using the product's original price
+                    $debitAmount = $quantity * $product->original_price;
+
+                    // Create a transaction record with inside_transaction set to true
+                    \App\Models\CanteenTransaction::create([
+                        'credit'             => 0,
+                        'debit'              => $debitAmount,
+                        'balance'            => $this->calculateNewBalanceDebit($debitAmount),
+                        'transaction_type'   => 'debit',
+                        'username'           => auth()->user()->name,
+                        'inside_transaction' => true,
+                        'description'        => $data['description'] ?? "Inside consumption: Removed {$quantity} units of {$product->name}",
+                    ]);
+                }
+            }
+            DB::commit();
+            return redirect()->route('canteen.inside_inventory.index')->with('success', 'Inside inventory updated successfully.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Inside Inventory Update Error: ' . $e->getMessage());
+            return redirect()->back()->withErrors('Failed to update inside inventory: ' . $e->getMessage());
+        }
+    }
+
+    // Helper method to calculate the new balance when deducting money:
+    private function calculateNewBalanceDebit($debitAmount)
+    {
+        $lastTransaction = \App\Models\CanteenTransaction::orderBy('created_at', 'desc')->first();
+        $previousBalance = $lastTransaction ? $lastTransaction->balance : 0;
+        return $previousBalance - $debitAmount;
+    }
+
+
 }
