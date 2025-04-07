@@ -9,26 +9,34 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class CanteenInventoryController extends Controller {
-    // Show a list of shows so the user can select one for inventory management
-    public function selectShow() {
+    
+    public function selectShow(Request $request)
+{
+    $date = $request->input('date');
+    if ($date) {
+        $shows = Show::whereDate('date', $date)->orderBy('time')->get();
+    } else {
         $shows = Show::orderBy('date', 'desc')->get();
-        return view('canteen.inventory.select_show', compact('shows'));
     }
+    return view('canteen.inventory.select_show', compact('shows'));
+}
 
-    // For a given show, display the products and any existing inventory record
+
     public function showInventory(Request $request, $showId) {
         $show = Show::findOrFail($showId);
         $products = Product::all();
-        // Get inventory records keyed by product_id
+        
         $inventories = CanteenInventory::where('show_id', $showId)->get()->keyBy('product_id');
         return view('canteen.inventory.inventory', compact('show', 'products', 'inventories'));
     }
 
-    // Update inventory records for the selected show
-    public function updateInventory(Request $request, $showId) {
+    public function updateInventory(Request $request, $showId)
+    {
         $data = $request->validate([
-            'inventories' => 'required|array', // expects [product_id => ['initial_stock'=>.., 'refill_stock'=>.., 'final_stock'=>..], ...]
+            'inventories' => 'required|array', 
         ]);
+
+        $action = $request->input('action'); 
 
         DB::beginTransaction();
         try {
@@ -45,29 +53,46 @@ class CanteenInventoryController extends Controller {
                 $inventory->final_stock   = $inventoryData['final_stock'];
                 $inventory->save();
 
-                // Calculate sold units: (initial + refill) - final
-                $soldCount = ($inventory->initial_stock + $inventory->refill_stock) - $inventory->final_stock;
+                if ($action === 'update_stock') {
+                    // Simply update the product stock count to the final stock value.
+                    $product->stock_count = $inventory->final_stock;
+                    $product->save();
+                } elseif ($action === 'update_inventory') {
+                    // Calculate sold units: (initial + refill) - final
+                    $soldCount = ($inventory->initial_stock + $inventory->refill_stock) - $inventory->final_stock;
+                    // Update product stock: subtract soldCount from current stock (or set to final stock, as needed)
+                    $product->stock_count = max(0, $product->stock_count - $soldCount);
+                    $product->save();
 
-                // Deduct sold units from the overall product stock (ensuring stock does not go negative)
-                $product->stock_count = max(0, $product->stock_count - $soldCount);
-                $product->save();
-
-                // Calculate revenue from sold items
-                $revenue = $soldCount * $product->selling_price;
-                if ($soldCount > 0) {
-                    CanteenTransaction::create([
-                        'amount'             => $revenue,
-                        'transaction_type'   => 'credit',
-                        'description'        => "Sold {$soldCount} units of {$product->name} during show {$showId}",
-                    ]);
+                    // Calculate revenue from sold items
+                    $revenue = $soldCount * $product->selling_price;
+                    if ($soldCount > 0) {
+                        \App\Models\CanteenTransaction::create([
+                            'credit'             => $revenue,
+                            'debit'              => 0,
+                            'balance'            => $this->calculateNewBalance($revenue),
+                            'transaction_type'   => 'credit',
+                            'username'           => auth()->user()->name,
+                            'inside_transaction' => false, // or adjust based on your needs
+                            'description'        => "Sold {$soldCount} units of {$product->name} during show {$showId}",
+                        ]);
+                    }
                 }
             }
             DB::commit();
             return redirect()->route('canteen.inventory.selectShow')->with('success', 'Inventory updated successfully.');
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Canteen Inventory Update Error: ' . $e->getMessage());
+            \Log::error('Canteen Inventory Update Error: ' . $e->getMessage());
             return redirect()->back()->withErrors('Failed to update inventory: ' . $e->getMessage());
         }
+    }
+
+    // Helper method to calculate new balance for transactions
+    private function calculateNewBalance($creditAmount)
+    {
+        $lastTransaction = \App\Models\CanteenTransaction::orderBy('created_at', 'desc')->first();
+        $previousBalance = $lastTransaction ? $lastTransaction->balance : 0;
+        return $previousBalance + $creditAmount;
     }
 }
