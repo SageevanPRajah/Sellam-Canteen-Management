@@ -13,8 +13,12 @@ return new class extends Migration
     {
         Schema::create('canteen_transactions', function (Blueprint $table) {
             $table->id();
-            $table->decimal('amount', 10, 2);  // positive (credit) or negative (debit)
-            $table->string('transaction_type'); // e.g., 'credit' for money added, 'debit' for money withdrawn
+            $table->decimal('credit', 10, 2)->default(0);
+            $table->decimal('debit', 10, 2)->default(0);
+            $table->decimal('balance', 10, 2)->default(0);
+            $table->string('transaction_type');
+            $table->string('username');
+            $table->boolean('inside_transaction')->default(false);
             $table->text('description')->nullable();
             $table->timestamps();
         });
